@@ -1,13 +1,12 @@
 from flask import Flask, request, jsonify
-import uuid
 
 app = Flask(__name__)
 
-# Dictionary to store registered users (this is for demonstration purposes only, use a database in production)
-users = {}
+# Sampling user data 
+users = []
 
 # Endpoint to register a new user
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def register_user():
     data = request.get_json()
     email = data.get('email')
@@ -15,68 +14,77 @@ def register_user():
     name = data.get('name')
     password = data.get('password')
 
-    if email and phone and name and password:
-        # In a real application, you would want to handle duplicate registrations and password hashing securely
-        user_id = str(uuid.uuid4())  # Generate a random user ID (this is for demonstration purposes only)
-        users[user_id] = {
-            'email': email,
-            'phone': phone,
-            'name': name,
-            'password': password
-        }
-        return jsonify({"message": "User registered successfully", "user_id": user_id}), 201
-    else:
-        return jsonify({"error": "Invalid data. Make sure to provide email, phone, name, and password."}), 400
-    
+    # Check if the required fields are provided
+    if not email or not phone or not name or not password:
+        return jsonify({'message': 'Missing required fields'}), 400
 
+    # Check if the user already exists (based on email or phone)
+    if any(user['email'] == email or user['phone'] == phone for user in users):
+        return jsonify({'message': 'User already exists'}), 409
+
+    new_user = {
+        'email': email,
+        'phone': phone,
+        'name': name,
+        'password': password
+    }
+    users.append(new_user)
+
+    return jsonify({'message': 'User registered successfully'}), 201
 
 # Endpoint to authenticate a user
-@app.route('/login', methods=['POST'])
-def authenticate_user():
+@app.route('/api/login', methods=['POST'])
+def login_user():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
 
-    if email and password:
-        for user_id, user_info in users.items():
-            if user_info['email'] == email and user_info['password'] == password:
-                return jsonify({"message": "Authentication successful", "user_id": user_id}), 200
-        return jsonify({"error": "Invalid credentials"}), 401
-    else:
-        return jsonify({"error": "Invalid data. Make sure to provide email and password."}), 400
+    # Find the user based on the provided email
+    user = next((user for user in users if user['email'] == email), None)
 
-# Endpoint to update user information (requires authentication)
-@app.route('/update', methods=['POST'])
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    if user['password'] != password:
+        return jsonify({'message': 'Invalid credentials'}), 401
+
+    return jsonify({'message': 'Authentication successful'}), 200
+
+# Endpoint to update user information
+@app.route('/api/update', methods=['PUT'])
 def update_user():
     data = request.get_json()
-    user_id = data.get('user_id')
-    token = data.get('token')
+    token = data.get('token')  # Assuming the token is generated during login
 
-    if user_id and token:
-        if user_id in users:
-            user_info = users[user_id]
-            user_info['email'] = data.get('email', user_info['email'])
-            user_info['phone'] = data.get('phone', user_info['phone'])
-            user_info['name'] = data.get('name', user_info['name'])
-            return jsonify({"message": "User information updated successfully"}), 200
-        else:
-            return jsonify({"error": "User not found"}), 404
-    else:
-        return jsonify({"error": "Invalid data. Make sure to provide user_id and token."}), 400
+    # Find the user based on the provided token
+    user = next((user for user in users if user.get('token') == token), None)
 
-# Endpoint to log out the user (requires authentication)
-@app.route('/logout', methods=['POST'])
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    # Update user information
+    user['email'] = data.get('email', user['email'])
+    user['phone'] = data.get('phone', user['phone'])
+    user['name'] = data.get('name', user['name'])
+
+    return jsonify({'message': 'User information updated successfully'}), 200
+
+# Endpoint to log out the user (clear token)
+@app.route('/api/logout', methods=['POST'])
 def logout_user():
     data = request.get_json()
-    user_id = data.get('user_id')
     token = data.get('token')
 
-    # In a real application, you would invalidate the token or session associated with the user
-    return jsonify({"message": "User logged out successfully"}), 200
+    # Find the user based on the provided token
+    user = next((user for user in users if user.get('token') == token), None)
 
-if __name__ == "__main__":
-    port_number = 20030
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
 
-    print("Running on port check it out:")
-    
-    app.run(host='0.0.0.0', port=port_number)
+    # Clear the token (log out the user)
+    user['token'] = None
+
+    return jsonify({'message': 'User logged out successfully'}), 200
+
+if __name__ == '__main__':
+    app.run(debug=True)
